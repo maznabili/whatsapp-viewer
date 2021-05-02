@@ -1,14 +1,26 @@
+#include "./EmoticonsUnicodeToSoftbank.h"
 #include "../Platforms/Win32/GUI/SmileyList.h"
 
 bool isSmiley(int character)
 {
-	for (int i = 0; i < smileyCount; i++)
+	return characterToResource.find(character) != characterToResource.end();
+}
+
+int getSmiley(int character)
+{
+	if (isSmiley(character))
 	{
-		if (smileyList[i].character == character)
+		return character;
+	}
+
+	auto it = emoticonsUnicodeToSoftbank.find(character);
+	if (it != emoticonsUnicodeToSoftbank.end())
+	{
+		if (isSmiley(it->second))
 		{
-			return true;
+			return it->second;
 		}
 	}
 
-	return false;
+	return 0;
 }

@@ -8,42 +8,18 @@
 #include "Crypt5.h"
 #include "Crypt7.h"
 
-const int chunk = 16384;
+const int chunk = 16 * 1024;
 
-void extractKey8(const std::string &keyFilename, const std::string &dbFilename, unsigned char *key, unsigned char *iv)
-{
-	unsigned char *keyBytes;
-	int filesize = loadFileUnsigned(keyFilename, &keyBytes);
-
-	if (filesize != 158)
-	{
-		throw Exception("Expected key filesize of 158 bytes does not match.");
-	}
-
-	unsigned char *dbBytes;
-	int filesizeDB = loadFileUnsigned(dbFilename, &dbBytes);
-
-	// Initialisation vector is stored in the msgstore after v2-12-38
-	// hexdump -n 67 -e '2/1 "%02x"' msgstore.db.crypt8 | cut -b 103-134 > iv.txt
-	// last 16 bytes from the db store starting at byte 51
-	// see http://forum.xda-developers.com/android/apps-games/decrypting-whatsapp-crypt8-v2-12-38-t3083847
-
-	memcpy(iv, &dbBytes[51], 16);
-	memcpy(key, &keyBytes[126], 32);
-
-	delete[] dbBytes;
-	delete[] keyBytes;
-}
-
-void uncompressBlock(z_stream &stream, std::vector<unsigned char> &uncompressed)
+int uncompressBlock(z_stream& stream, std::ostream &uncompressed)
 {
 	unsigned char out[chunk];
+	int ret = 0;
 
 	do
 	{
 		stream.avail_out = chunk;
 		stream.next_out = out;
-		int ret = inflate(&stream, Z_NO_FLUSH);
+		ret = inflate(&stream, Z_NO_FLUSH);
 
 		if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR)
 		{
@@ -52,15 +28,13 @@ void uncompressBlock(z_stream &stream, std::vector<unsigned char> &uncompressed)
 		}
 
 		unsigned int have = chunk - stream.avail_out;
-
-		for (unsigned int i = 0; i < have; i++)
-		{
-			uncompressed.push_back(out[i]);
-		}
+		uncompressed.write(reinterpret_cast<char*>(out), have);
 	} while (stream.avail_out == 0);
+
+	return ret;
 }
 
-void uncompressGzipBuffer(unsigned char *compressedBytes, int size, std::vector<unsigned char> &uncompressed)
+void uncompressGzipBuffer(std::istream &compressed, std::ostream &uncompressed)
 {
 	unsigned char in[chunk];
 
@@ -73,50 +47,55 @@ void uncompressGzipBuffer(unsigned char *compressedBytes, int size, std::vector<
 		throw Exception("Decryption failed. Error during unzipping (inflateInit). Invalid key?");
 	}
 
-	unsigned char *currentPosition = compressedBytes;
-
 	do
 	{
-		int bytesLeft = size - (currentPosition - compressedBytes);
-		if (bytesLeft == 0)
+		if (!compressed || compressed.eof())
 		{
-            break;
+			throw Exception("Couldn't read compressed file (unexpected EOF).");
 		}
 
-		int bytesToCopy = bytesLeft;
-		if (bytesLeft > chunk)
-		{
-			bytesToCopy = chunk;
-		}
+		compressed.read(reinterpret_cast<char*>(in), chunk);
+		std::streamsize bytesRead = compressed.gcount();
+		stream.avail_in = bytesRead;
+		stream.next_in = in;
 
-		memcpy(in, currentPosition, bytesToCopy);
-        stream.avail_in = bytesToCopy;
-        stream.next_in = in;
-
-		uncompressBlock(stream, uncompressed);
-
-		currentPosition += bytesToCopy;
+		ret = uncompressBlock(stream, uncompressed);
 	} while (ret != Z_STREAM_END);
 
 	inflateEnd(&stream);
 }
 
-void decryptWhatsappDatabase8(const std::string &filename, const std::string &filenameDecrypted, unsigned char *key, unsigned char *initVector)
+void decryptWhatsappDatabase8(const std::string &filename, const std::string &filenameDecrypted, unsigned char *key)
 {
-	unsigned char *fileBytes;
-	int filesize = loadFileUnsigned(filename, &fileBytes);
-	int databaseSize = filesize - skipBytesCrypt7;
-	unsigned char *databaseBytes = &fileBytes[skipBytesCrypt7];
+	std::ifstream file(filename, std::ios::binary);
 
-	decryptAes(databaseBytes, databaseBytes, key, initVector, databaseSize);
+	file.seekg(0, std::ios::end);
+	std::streamoff filesize = file.tellg();
 
-	std::vector<unsigned char> uncompressed;
-	uncompressGzipBuffer(databaseBytes, databaseSize, uncompressed);
+	unsigned char initVector[16];
+	file.seekg(51, std::ios::beg);
+	file.read(reinterpret_cast<char*>(initVector), 16);
 
-	validateOutput(&uncompressed[0]);
-	saveOutputToFile(&uncompressed[0], uncompressed.size(), filenameDecrypted);
+	std::streamoff databaseSize = filesize - skipBytesCrypt7;
+	const std::string tempFilename = filenameDecrypted + ".temp";
 
-	delete[] fileBytes;
+	{
+		std::ofstream decryptedFile(tempFilename, std::ios::binary);
+		decrypt_aes_cbc(256, file, databaseSize, key, initVector, decryptedFile);
+	}
+
+	{
+		std::ifstream decryptedFile(tempFilename, std::ios::binary);
+		std::ofstream uncompressedFile(filenameDecrypted, std::ios::binary);
+		uncompressGzipBuffer(decryptedFile, uncompressedFile);
+	}
+
+	std::remove(tempFilename.c_str());
+
+	{
+		std::ifstream uncompressedFile(filenameDecrypted, std::ios::binary);
+		validateOutput(uncompressedFile);
+	}
 }
 
 void decryptWhatsappDatabase8(const std::string &filename, const std::string &filenameDecrypted, const std::string &keyFilename)
@@ -124,6 +103,6 @@ void decryptWhatsappDatabase8(const std::string &filename, const std::string &fi
 	unsigned char key[32];
 	unsigned char iv[16];
 
-	extractKey8(keyFilename, filename, key, iv);
-	decryptWhatsappDatabase8(filename, filenameDecrypted, key, iv);
+	loadKey(keyFilename, key, iv);
+	decryptWhatsappDatabase8(filename, filenameDecrypted, key);
 }

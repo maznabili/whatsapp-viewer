@@ -11,7 +11,7 @@
 #include "../Platforms/Win32/Resource.h"
 #include "../Platforms/Win32/Timestamp.h"
 #include "../Platforms/Win32/GUI/SmileyList.h"
-#include "../Platforms/Win32/GUI/ChatControl/Elements/Messages/ChatControlMessageAudio.h"
+#include "../Platforms/Win32/GUI/ChatControl/Elements/Messages/ChatControlMessage.h"
 #include "../WhatsApp/Chat.h"
 #include "../WhatsApp/Emoticons.h"
 #include "../WhatsApp/Message.h"
@@ -70,12 +70,12 @@ std::string ChatExporterHtml::buildMessages(WhatsappChat &chat, std::set<int> &u
 					{
 						output << "<div><img src=\"data:image/jpeg;base64," << base64_encode(message.getLinkThumbnail(), message.getLinkThumbnailSize()) << "\"></div>" << std::endl;
 					}
-					output << "<div><span>" << message.getMediaCaption() << "</span></div>";
-					output << "<div><span>" << message.getData() << "</span></div>";
+					output << "<div><span>" << convertMessageToHtml(message.getMediaCaption(), usedEmoticons) << "</span></div>";
+					output << "<div><span>" << convertMessageToHtml(message.getData(), usedEmoticons) << "</span></div>";
 				}
 				else
 				{
-					output << "<span>" << convertMessageToHtml(message, usedEmoticons) << "</span>";
+					output << "<span>" << convertMessageToHtml(message.getData(), usedEmoticons) << "</span>";
 				}
 			} break;
 			case MEDIA_WHATSAPP_IMAGE:
@@ -87,7 +87,7 @@ std::string ChatExporterHtml::buildMessages(WhatsappChat &chat, std::set<int> &u
 				}
 				if (message.getMediaCaption().length() > 0)
 				{
-					output << "<div><span>" << message.getMediaCaption() << "</span></div>";
+					output << "<div><span>" << convertMessageToHtml(message.getMediaCaption(), usedEmoticons) << "</span></div>";
 				}
 			} break;
 			case MEDIA_WHATSAPP_AUDIO:
@@ -102,7 +102,7 @@ std::string ChatExporterHtml::buildMessages(WhatsappChat &chat, std::set<int> &u
 				}
 				if (message.getMediaCaption().length() > 0)
 				{
-					output << "<div><span>" << message.getMediaCaption() << "</span></div>";
+					output << "<div><span>" << convertMessageToHtml(message.getMediaCaption(), usedEmoticons) << "</span></div>";
 				}
 				output << "<span>[ Video ]</span>";
 			} break;
@@ -147,22 +147,24 @@ void ChatExporterHtml::replacePlaceholder(std::string &html, const std::string &
 	html.replace(start, placeholder.length(), text);
 }
 
-std::string ChatExporterHtml::convertMessageToHtml(WhatsappMessage &message, std::set<int> &usedEmoticons)
+std::string ChatExporterHtml::convertMessageToHtml(std::string message, std::set<int> &usedEmoticons)
 {
-	std::string messageString = message.getData();
 	std::stringstream output;
 
 	try
 	{
-		for (std::string::iterator it = messageString.begin(); it != messageString.end();)
+		for (std::string::iterator it = message.begin(); it != message.end();)
 		{
 			std::string::iterator before = it;
-			int character = utf8::next(it, messageString.end());
+			int character = utf8::next(it, message.end());
+			int emoticonCharacter = getSmiley(character);
 
-			if (isSmiley(character))
+			if (emoticonCharacter > 0)
 			{
-				usedEmoticons.insert(character);
-				output << "<span class=\"emoticon_" << std::hex << character << "\"></span>";
+				usedEmoticons.insert(emoticonCharacter);
+				output.imbue(std::locale::classic());
+				output << "<span class=\"emoticon_" << std::hex << emoticonCharacter << "\"></span>";
+				output.imbue(std::locale());
 			}
 			else
 			{
@@ -172,7 +174,7 @@ std::string ChatExporterHtml::convertMessageToHtml(WhatsappMessage &message, std
 	}
 	catch (utf8::exception &exception)
 	{
-		output << "[INVALID DATA: " << messageString << "]";
+		output << "[INVALID DATA: " << message << "]";
 	}
 
 	return output.str();
@@ -181,34 +183,24 @@ std::string ChatExporterHtml::convertMessageToHtml(WhatsappMessage &message, std
 std::string ChatExporterHtml::buildEmoticonStyles(const std::set<int> &usedEmoticons)
 {
 	std::stringstream css;
+
 	for(std::set<int>::const_iterator it = usedEmoticons.begin(); it != usedEmoticons.end(); ++it)
 	{
 		int character = *it;
-		int smileyIndex = -1;
 
-		for (int i = 0; i < smileyCount; i++)
-		{
-			if (smileyList[i].character == character)
-			{
-				smileyIndex = i;
-				break;
-			}
-		}
+		unsigned char *bytes = NULL;
+		DWORD size = 0;
+		loadResource(MAKEINTRESOURCE(characterToResource[character]), L"PNG", bytes, size);
+		std::string base64Emoticon = base64_encode(bytes, size);
 
-		if (smileyIndex >= 0)
-		{
-			unsigned char *bytes = NULL;
-			DWORD size = 0;
-			loadResource(MAKEINTRESOURCE(smileyList[smileyIndex].resource), L"PNG", bytes, size);
-			std::string base64Emoticon = base64_encode(bytes, size);
-
-			css << ".emoticon_" << std::hex << character << " {" << std::endl;
-			css << "display: inline-block;" << std::endl;
-			css << "width: 20px;" << std::endl;
-			css << "height: 20px;" << std::endl;
-			css << "background-image: url(data:image/png;base64," << base64Emoticon << ")" << std::endl;
-			css << "}" << std::endl;
-		}
+		css.imbue(std::locale::classic());
+		css << ".emoticon_" << std::hex << character << " {" << std::endl;
+		css.imbue(std::locale());
+		css << "display: inline-block;" << std::endl;
+		css << "width: 20px;" << std::endl;
+		css << "height: 20px;" << std::endl;
+		css << "background-image: url(data:image/png;base64," << base64Emoticon << ")" << std::endl;
+		css << "}" << std::endl;
 	}
 
 	return css.str();

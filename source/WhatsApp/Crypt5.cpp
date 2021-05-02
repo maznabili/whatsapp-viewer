@@ -9,46 +9,6 @@
 const unsigned char baseKey[] = { 141, 75, 21, 92, 201, 255, 129, 229, 203, 246, 250, 120, 25, 54, 106, 62, 198, 33, 166, 86, 65, 108, 215, 147 };
 const unsigned char initVector[] = { 0x1E,0x39,0xF3,0x69,0xE9,0xD,0xB3,0x3A,0xA7,0x3B,0x44,0x2B,0xBB,0xB6,0xB0,0xB9 };
 
-long loadFile(const std::string &filename, char **output)
-{
-	std::ifstream file(filename.c_str(), std::ios::binary);
-
-	if (!file)
-	{
-		throw Exception("database not found");
-	}
-
-	file.seekg(0, std::ios::end);
-	int filesize = file.tellg();
-	file.seekg(0, std::ios::beg);
-
-	*output = new char[filesize];
-	file.read(*output, filesize);
-	file.close();
-
-	return filesize;
-}
-
-long loadFileUnsigned(const std::string &filename, unsigned char **output)
-{
-	std::ifstream file(filename.c_str(), std::ios::binary);
-
-	if (!file)
-	{
-		throw Exception("database not found");
-	}
-
-	file.seekg(0, std::ios::end);
-	int filesize = file.tellg();
-	file.seekg(0, std::ios::beg);
-
-	*output = new unsigned char[filesize];
-	file.read(reinterpret_cast<char *>(*output), filesize);
-	file.close();
-
-	return filesize;
-}
-
 void buildKey(unsigned char *key, const std::string &accountName)
 {
 	MD5 md5;
@@ -60,39 +20,43 @@ void buildKey(unsigned char *key, const std::string &accountName)
 	}
 }
 
-void validateOutput(unsigned char *databaseBytes)
+void validateOutput(std::istream &input)
 {
 	const char expectedBytes[] = "SQLite format 3";
-	if (memcmp(databaseBytes, expectedBytes, sizeof(expectedBytes)) != 0)
-	{
-		throw Exception("Decryption failed. Invalid key file or account name?");
-	}
-}
+	char read[sizeof(expectedBytes)];
 
-void saveOutputToFile(unsigned char *databaseBytes, int size, const std::string &filename)
-{
-	std::ofstream output(filename.c_str(), std::ios::binary);
-	if (!output)
-	{
-		throw Exception("Could not save decrypted WhatsApp database. Permissions needed?");
-	}
+	input.read(read, sizeof(expectedBytes));
 
-	output.write(reinterpret_cast<char *>(databaseBytes), size);
+	if (input.gcount() != sizeof(expectedBytes))
+	{
+		throw Exception("Couldn't validate output file");
+	}
+	if (memcmp(read, expectedBytes, sizeof(expectedBytes)) != 0)
+	{
+		throw Exception("Validation failed. Invalid key file or account name?");
+	}
 }
 
 void decryptWhatsappDatabase5(const std::string &filename, const std::string &filenameDecrypted, unsigned char *key)
 {
-	unsigned char *databaseBytes;
-	int filesize = loadFileUnsigned(filename, &databaseBytes);
+	std::ifstream file(filename, std::ios::binary);
+
+	file.seekg(0, std::ios::end);
+	std::streamoff filesize = file.tellg();
 
 	unsigned char iv[16];
 	memcpy(iv, initVector, 16);
 
-	decrypt_aes_cbc_192(databaseBytes, databaseBytes, filesize, key, iv);
-	validateOutput(databaseBytes);
-	saveOutputToFile(databaseBytes, filesize, filenameDecrypted);
+	{
+		std::ofstream decryptedFile(filenameDecrypted, std::ios::binary);
+		file.seekg(0, std::ios::beg);
+		decrypt_aes_cbc(192, file, filesize, key, iv, decryptedFile);
+	}
 
-	delete[] databaseBytes;
+	{
+		std::ifstream decryptedFile(filenameDecrypted, std::ios::binary);
+		validateOutput(decryptedFile);
+	}
 }
 
 void decryptWhatsappDatabase5(const std::string &filename, const std::string &filenameDecrypted, const std::string &accountName)

@@ -17,13 +17,17 @@ Small tool to display chats from the Android msgstore.db database.
 
 ## Command line support
 
-```
+```bash
 "WhatsApp Viewer.exe" -decrypt12 msgstore-2016-10-22.1.db.crypt12 whatsapp.cryptkey12 decrypted.db
 ```
 
 You cannot see bigger images because only thumbnails are stored in the database.
 
-Credits:
+## Build
+
+See *build-release.cmd*.
+
+## Credits
 
 * TripCode for crypt12 support https://github.com/EliteAndroidApps/WhatsApp-Crypt12-Decrypter
 * Whatsapp Xtract
