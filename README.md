@@ -18,17 +18,34 @@ Small tool to display chats from the Android msgstore.db database.
 ## Command line support
 
 ```bash
-"WhatsApp Viewer.exe" -decrypt12 msgstore-2016-10-22.1.db.crypt12 whatsapp.cryptkey12 decrypted.db
+"WhatsApp Viewer.exe" -decrypt14 msgstore-2016-10-22.1.db.crypt14 whatsapp.cryptkey14 decrypted.db
 ```
 
 You cannot see bigger images because only thumbnails are stored in the database.
 
 ## Build
 
+### Visual Studio
+
+Open *WhatsApp Viewer.sln*.
+
+### Command-line
+
 See *build-release.cmd*.
+
+### Vagrant
+
+You can also use vagrant to build (for example if you are on a Linux machine):
+
+```bash
+vagrant up
+vagrant powershell -c 'cmd.exe /c "cd C:\vagrant && build-release.cmd"'
+```
 
 ## Credits
 
+* @askeron and @zmeyc for bulk export https://github.com/andreas-mausch/whatsapp-viewer/pull/103
+* @torsade for crypt14 support https://github.com/andreas-mausch/whatsapp-viewer/pull/115
 * TripCode for crypt12 support https://github.com/EliteAndroidApps/WhatsApp-Crypt12-Decrypter
 * Whatsapp Xtract
 * pwncrypt5.py https://github.com/aramosf/pwncrypt5/blob/master/pwncrypt5.py

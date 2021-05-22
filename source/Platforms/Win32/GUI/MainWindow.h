@@ -47,7 +47,8 @@ private:
 	void decryptDatabaseCrypt7();
 	void decryptDatabaseCrypt8();
 	void decryptDatabaseCrypt12();
-	void decryptDatabaseCrypt7_8_12(void (*decryptWhatsappDatabase)(const std::string &filename, const std::string &filenameDecrypted, const std::string &keyFilename));
+	void decryptDatabaseCrypt14();
+	void decryptDatabaseCrypt7_8_12_14(void (*decryptWhatsappDatabase)(const std::string &filename, const std::string &filenameDecrypted, const std::string &keyFilename));
 	void clearChats();
 	void clearChatList();
 
@@ -63,7 +64,11 @@ private:
 	void setSortingColumn(int columnIndex);
 	void updateSortingArrow();
 
-	void exportChat(WhatsappChat &chat, ChatExporter &exporter, const std::string &extension);
+	void exportChats(const std::vector<WhatsappChat *> &chats, ChatExporter &exporter, const std::string &extension);
+	bool canExportChats();
+	void exportAllChatsToTxt();
+	void exportAllChatsToHtml();
+	void exportAllChatsToJson();
 	void exportChatToTxt(WhatsappChat &chat);
 	void exportChatToHtml(WhatsappChat &chat);
 	void exportChatToJson(WhatsappChat &chat);
